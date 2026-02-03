@@ -12,8 +12,9 @@ const uint16_t SERVER_PORT = 8080;
 const char HEALTH_PATH[] = "/score/api/health";
 const unsigned long HEALTH_CHECK_INTERVAL_MS = 10000;  // 10초마다
 const unsigned long HEART_DISPLAY_MS = 2000;           // 성공 시 하트 2초 표시
+const unsigned long FAIL_DISPLAY_MS = 2000;            // 실패 시 X 2초 표시
 
-// 하트 비트맵 (8x12, 메트릭스에 헬스 OK 표시)
+// 하트 비트맵 (8x12, 헬스 OK)
 byte Heart[8][12] = {
   { 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0 },
   { 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0 },
@@ -25,17 +26,35 @@ byte Heart[8][12] = {
   { 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0 }
 };
 
+// X 비트맵 (8x12, 헬스 Fail)
+byte Cross[8][12] = {
+  { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
+  { 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0 },
+  { 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0 },
+  { 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0 },
+  { 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0 },
+  { 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0 },
+  { 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0 },
+  { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0 }
+};
+
 byte Empty[8][12] = {0};
 
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
 unsigned long lastHealthCheck = 0;
-unsigned long heartShowUntil = 0;
+unsigned long resultShowUntil = 0;   // 하트 또는 X 표시 종료 시각
+bool lastHealthOk = false;           // 마지막 헬스 결과 (하트 vs X)
 WiFiClient client;
 
 // 메트릭스에 하트 표시 (헬스 OK)
 void displayHeart() {
   matrix.renderBitmap(Heart, 8, 12);
+}
+
+// 메트릭스에 X 표시 (헬스 Fail)
+void displayCross() {
+  matrix.renderBitmap(Cross, 8, 12);
 }
 
 // GET /api/health 호출, 200 + "ok" 이면 true
@@ -101,14 +120,17 @@ void loop() {
   // 헬스 체크 주기 실행
   if (WiFi.status() == WL_CONNECTED && (now - lastHealthCheck >= HEALTH_CHECK_INTERVAL_MS)) {
     lastHealthCheck = now;
-    if (doHealthCheck()) {
-      heartShowUntil = now + HEART_DISPLAY_MS;
-    }
+    lastHealthOk = doHealthCheck();
+    resultShowUntil = now + (lastHealthOk ? HEART_DISPLAY_MS : FAIL_DISPLAY_MS);
   }
 
-  // 하트 표시 중이면 메트릭스에 하트, 아니면 빈 화면
-  if (now < heartShowUntil) {
-    displayHeart();
+  // 결과 표시 중이면 하트(성공) 또는 X(실패), 아니면 빈 화면
+  if (now < resultShowUntil) {
+    if (lastHealthOk) {
+      displayHeart();
+    } else {
+      displayCross();
+    }
   } else {
     matrix.renderBitmap(Empty, 8, 12);
   }
