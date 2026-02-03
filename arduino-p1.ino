@@ -1,20 +1,25 @@
+/*
+ * Arduino P1: API 헬스 체크 → LED 매트릭스에 하트(성공) / X(실패) 표시
+ * 로직 구성: 설정 → 표시 → 네트워크 → setup/loop
+ */
+
+// ---- includes ----
 #include "Arduino_LED_Matrix.h"
 #include "WiFiS3.h"
-
-// arduino_secrets.h.example 를 arduino_secrets.h 로 복사 후 SSID/비밀번호 입력
-#include "./arduino_secrets.h"
+#include "./arduino_secrets.h"  // arduino_secrets.h.example 복사 후 SSID/비밀번호 입력
 
 ArduinoLEDMatrix matrix;
+WiFiClient client;
 
-// API 서버 (score-archery-api 헬스 체크)
+// ---- 설정 (API·주기·표시 시간) ----
 const char SERVER[] = "158.179.161.203";
 const uint16_t SERVER_PORT = 8080;
 const char HEALTH_PATH[] = "/score/api/health";
 const unsigned long HEALTH_CHECK_INTERVAL_MS = 10000;  // 10초마다
-const unsigned long HEART_DISPLAY_MS = 2000;           // 성공 시 하트 2초 표시
-const unsigned long FAIL_DISPLAY_MS = 2000;            // 실패 시 X 2초 표시
+const unsigned long HEART_DISPLAY_MS = 2000;           // 성공 시 하트 2초
+const unsigned long FAIL_DISPLAY_MS = 2000;            // 실패 시 X 2초
 
-// 하트 비트맵 (8x12, 헬스 OK)
+// ---- 비트맵 (8x12) ----
 byte Heart[8][12] = {
   { 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0 },
   { 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0 },
@@ -26,7 +31,6 @@ byte Heart[8][12] = {
   { 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0 }
 };
 
-// X 비트맵 (8x12, 헬스 Fail)
 byte Cross[8][12] = {
   { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
   { 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0 },
@@ -40,24 +44,63 @@ byte Cross[8][12] = {
 
 byte Empty[8][12] = {0};
 
+// ---- 상태 (헬스 체크·표시) ----
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
-unsigned long lastHealthCheck = 0;
-unsigned long resultShowUntil = 0;   // 하트 또는 X 표시 종료 시각
-bool lastHealthOk = false;           // 마지막 헬스 결과 (하트 vs X)
-WiFiClient client;
+unsigned long lastHealthCheck = 0;   // 마지막 헬스 체크 시각
+unsigned long resultShowUntil = 0;   // 하트/X 표시 종료 시각
+bool lastHealthOk = false;           // 마지막 헬스 결과 (true=하트, false=X)
 
-// 메트릭스에 하트 표시 (헬스 OK)
+// ---- 표시 로직 ----
 void displayHeart() {
   matrix.renderBitmap(Heart, 8, 12);
 }
 
-// 메트릭스에 X 표시 (헬스 Fail)
 void displayCross() {
   matrix.renderBitmap(Cross, 8, 12);
 }
 
-// GET /api/health 호출, 200 + "ok" 이면 true
+void displayEmpty() {
+  matrix.renderBitmap(Empty, 8, 12);
+}
+
+/** 현재 시각 기준으로 매트릭스에 표시할 내용 갱신 */
+void updateDisplay(unsigned long now) {
+  if (now < resultShowUntil) {
+    if (lastHealthOk) {
+      displayHeart();
+    } else {
+      displayCross();
+    }
+  } else {
+    displayEmpty();
+  }
+}
+
+// ---- 네트워크 로직 ----
+/** WiFi 연결 시도 (최대 3회), 성공 시 true */
+bool connectWiFi() {
+  if (WiFi.status() == WL_NO_MODULE) {
+    Serial.println("WiFi module not found");
+    return false;
+  }
+  int status = WL_IDLE_STATUS;
+  for (int tryCount = 0; tryCount < 3 && status != WL_CONNECTED; tryCount++) {
+    Serial.print("WiFi connecting to ");
+    Serial.println(ssid);
+    status = WiFi.begin(ssid, pass);
+    delay(10000);
+  }
+  if (status == WL_CONNECTED) {
+    Serial.print("WiFi OK, IP: ");
+    Serial.println(WiFi.localIP());
+    return true;
+  }
+  Serial.println("WiFi failed.");
+  return false;
+}
+
+/** GET /api/health 호출, 200 + "ok" 이면 true */
 bool doHealthCheck() {
   client.stop();
   client.setTimeout(5000);
@@ -79,9 +122,7 @@ bool doHealthCheck() {
   while (client.connected() && (millis() - start < 6000)) {
     while (client.available()) {
       String line = client.readStringUntil('\n');
-      if (line.startsWith("HTTP/")) {
-        if (line.indexOf("200") >= 0) got200 = true;
-      }
+      if (line.startsWith("HTTP/") && line.indexOf("200") >= 0) got200 = true;
       if (line.indexOf("ok") >= 0 || line.indexOf("OK") >= 0) gotOk = true;
     }
   }
@@ -91,47 +132,25 @@ bool doHealthCheck() {
   return ok;
 }
 
+/** 주기마다 헬스 체크 실행하고 결과 표시 기간 설정 */
+void runScheduledHealthCheck(unsigned long now) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (now - lastHealthCheck < HEALTH_CHECK_INTERVAL_MS) return;
+
+  lastHealthCheck = now;
+  lastHealthOk = doHealthCheck();
+  resultShowUntil = now + (lastHealthOk ? HEART_DISPLAY_MS : FAIL_DISPLAY_MS);
+}
+
+// ---- setup / loop ----
 void setup() {
   Serial.begin(9600);
   matrix.begin();
-
-  if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("WiFi module not found");
-  } else {
-    int status = WL_IDLE_STATUS;
-    for (int tryCount = 0; tryCount < 3 && status != WL_CONNECTED; tryCount++) {
-      Serial.print("WiFi connecting to ");
-      Serial.println(ssid);
-      status = WiFi.begin(ssid, pass);
-      delay(10000);
-    }
-    if (status == WL_CONNECTED) {
-      Serial.print("WiFi OK, IP: ");
-      Serial.println(WiFi.localIP());
-    } else {
-      Serial.println("WiFi failed.");
-    }
-  }
+  connectWiFi();
 }
 
 void loop() {
   unsigned long now = millis();
-
-  // 헬스 체크 주기 실행
-  if (WiFi.status() == WL_CONNECTED && (now - lastHealthCheck >= HEALTH_CHECK_INTERVAL_MS)) {
-    lastHealthCheck = now;
-    lastHealthOk = doHealthCheck();
-    resultShowUntil = now + (lastHealthOk ? HEART_DISPLAY_MS : FAIL_DISPLAY_MS);
-  }
-
-  // 결과 표시 중이면 하트(성공) 또는 X(실패), 아니면 빈 화면
-  if (now < resultShowUntil) {
-    if (lastHealthOk) {
-      displayHeart();
-    } else {
-      displayCross();
-    }
-  } else {
-    matrix.renderBitmap(Empty, 8, 12);
-  }
+  runScheduledHealthCheck(now);
+  updateDisplay(now);
 }
