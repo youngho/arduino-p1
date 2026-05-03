@@ -9,7 +9,7 @@
 #include "./arduino_secrets.h"  // arduino_secrets.h.example 복사 후 SSID/비밀번호 입력
 
 ArduinoLEDMatrix matrix;
-WiFiClient client;
+WiFiSSLClient client;
 
 // ---- 설정 (API·주기·표시 시간) ----
 const char SERVER[] = "pinksoft.io";
@@ -112,7 +112,10 @@ bool doHealthCheck() {
   client.print(HEALTH_PATH);
   client.println(" HTTP/1.1");
   client.print("Host: ");
-  client.println(SERVER);
+  client.print(SERVER);
+  client.print(":");
+  client.println(SERVER_PORT);
+  client.println("Accept: */*");
   client.println("Connection: close");
   client.println();
 
