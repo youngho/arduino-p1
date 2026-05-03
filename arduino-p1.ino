@@ -142,7 +142,7 @@ void runScheduledHealthCheck(unsigned long now) {
 
   lastHealthCheck = now;
   lastHealthOk = doHealthCheck();
-  resultShowUntil = now + (lastHealthOk ? HEART_DISPLAY_MS : FAIL_DISPLAY_MS);
+  resultShowUntil = millis() + (lastHealthOk ? HEART_DISPLAY_MS : FAIL_DISPLAY_MS);
 }
 
 // ---- setup / loop ----
@@ -155,5 +155,5 @@ void setup() {
 void loop() {
   unsigned long now = millis();
   runScheduledHealthCheck(now);
-  updateDisplay(now);
+  updateDisplay(millis());
 }
