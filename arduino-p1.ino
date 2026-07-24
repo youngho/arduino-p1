@@ -14,7 +14,7 @@ WiFiSSLClient client;
 // ---- 설정 (API·주기·표시 시간) ----
 const char SERVER[] = "pinksoft.io";
 const uint16_t SERVER_PORT = 8080;
-const char HEALTH_PATH[] = "/iot/api/health";
+const char HEALTH_PATH[] = "/score/api/health";
 const unsigned long HEALTH_CHECK_INTERVAL_MS = 10000; // 10초마다
 const unsigned long HEART_DISPLAY_MS = 2000;          // 성공 시 하트 2초
 const unsigned long FAIL_DISPLAY_MS = 2000;           // 실패 시 X 2초
