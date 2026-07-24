@@ -127,13 +127,14 @@ void printSerialNumber() {
 /** GET /score/api/health?uid={UID} 호출, 200 + "ok" 이면 true */
 bool doHealthCheck() {
   client.stop();
-  client.setTimeout(5000);
+  client.setTimeout(3000);
   if (!client.connect(SERVER, SERVER_PORT)) {
     Serial.println("Health: connect failed");
     return false;
   }
 
-  String pathWithUid = String(HEALTH_PATH) + "?uid=" + getDeviceUid();
+  String uid = getDeviceUid();
+  String pathWithUid = String(HEALTH_PATH) + "?uid=" + uid;
 
   client.print("GET ");
   client.print(pathWithUid);
@@ -149,18 +150,28 @@ bool doHealthCheck() {
   unsigned long start = millis();
   bool got200 = false;
   bool gotOk = false;
-  while (client.connected() && (millis() - start < 6000)) {
+
+  while ((millis() - start < 4000) && (client.connected() || client.available())) {
     while (client.available()) {
       String line = client.readStringUntil('\n');
       if (line.startsWith("HTTP/") && line.indexOf("200") >= 0)
         got200 = true;
       if (line.indexOf("ok") >= 0 || line.indexOf("OK") >= 0)
         gotOk = true;
+      start = millis(); // 데이터 수신 시 타임아웃 초기화
     }
+    delay(10);
   }
   client.stop();
+
   bool ok = got200 && gotOk;
-  Serial.println(ok ? "Health: OK" : "Health: fail (unauthorized or error)");
+  if (ok) {
+    Serial.println("Health: OK (Authorized)");
+  } else {
+    Serial.print("Health: fail - Unauthorized or error (UID: ");
+    Serial.print(uid);
+    Serial.println(")");
+  }
   return ok;
 }
 
