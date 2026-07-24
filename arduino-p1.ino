@@ -4,9 +4,9 @@
  */
 
 // ---- includes ----
+#include "./arduino_secrets.h" // arduino_secrets.h.example 복사 후 SSID/비밀번호 입력
 #include "Arduino_LED_Matrix.h"
 #include "WiFiS3.h"
-#include "./arduino_secrets.h"  // arduino_secrets.h.example 복사 후 SSID/비밀번호 입력
 
 ArduinoLEDMatrix matrix;
 WiFiSSLClient client;
@@ -15,54 +15,38 @@ WiFiSSLClient client;
 const char SERVER[] = "pinksoft.io";
 const uint16_t SERVER_PORT = 8080;
 const char HEALTH_PATH[] = "/score/api/health";
-const unsigned long HEALTH_CHECK_INTERVAL_MS = 10000;  // 10초마다
-const unsigned long HEART_DISPLAY_MS = 2000;           // 성공 시 하트 2초
-const unsigned long FAIL_DISPLAY_MS = 2000;            // 실패 시 X 2초
+const unsigned long HEALTH_CHECK_INTERVAL_MS = 10000; // 10초마다
+const unsigned long HEART_DISPLAY_MS = 2000;          // 성공 시 하트 2초
+const unsigned long FAIL_DISPLAY_MS = 2000;           // 실패 시 X 2초
 
 // ---- 비트맵 (8x12) ----
 byte Heart[8][12] = {
-  { 0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0 },
-  { 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0 },
-  { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0 },
-  { 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0 },
-  { 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0 },
-  { 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0 }
-};
+    {0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0}, {0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0},
+    {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0}, {0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0},
+    {0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0}, {0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0},
+    {0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0}};
 
 byte Cross[8][12] = {
-  { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0 },
-  { 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0 },
-  { 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0 },
-  { 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0 },
-  { 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0 },
-  { 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0 }
-};
+    {0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0}, {0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0},
+    {0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0},
+    {0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0}, {0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0}};
 
 byte Empty[8][12] = {0};
 
 // ---- 상태 (헬스 체크·표시) ----
 char ssid[] = SECRET_SSID;
 char pass[] = SECRET_PASS;
-unsigned long lastHealthCheck = 0;   // 마지막 헬스 체크 시각
-unsigned long resultShowUntil = 0;   // 하트/X 표시 종료 시각
-bool lastHealthOk = false;           // 마지막 헬스 결과 (true=하트, false=X)
+unsigned long lastHealthCheck = 0; // 마지막 헬스 체크 시각
+unsigned long resultShowUntil = 0; // 하트/X 표시 종료 시각
+bool lastHealthOk = false;         // 마지막 헬스 결과 (true=하트, false=X)
 
 // ---- 표시 로직 ----
-void displayHeart() {
-  matrix.renderBitmap(Heart, 8, 12);
-}
+void displayHeart() { matrix.renderBitmap(Heart, 8, 12); }
 
-void displayCross() {
-  matrix.renderBitmap(Cross, 8, 12);
-}
+void displayCross() { matrix.renderBitmap(Cross, 8, 12); }
 
-void displayEmpty() {
-  matrix.renderBitmap(Empty, 8, 12);
-}
+void displayEmpty() { matrix.renderBitmap(Empty, 8, 12); }
 
 /** 현재 시각 기준으로 매트릭스에 표시할 내용 갱신 */
 void updateDisplay(unsigned long now) {
@@ -125,8 +109,10 @@ bool doHealthCheck() {
   while (client.connected() && (millis() - start < 6000)) {
     while (client.available()) {
       String line = client.readStringUntil('\n');
-      if (line.startsWith("HTTP/") && line.indexOf("200") >= 0) got200 = true;
-      if (line.indexOf("ok") >= 0 || line.indexOf("OK") >= 0) gotOk = true;
+      if (line.startsWith("HTTP/") && line.indexOf("200") >= 0)
+        got200 = true;
+      if (line.indexOf("ok") >= 0 || line.indexOf("OK") >= 0)
+        gotOk = true;
     }
   }
   client.stop();
@@ -137,18 +123,58 @@ bool doHealthCheck() {
 
 /** 주기마다 헬스 체크 실행하고 결과 표시 기간 설정 */
 void runScheduledHealthCheck(unsigned long now) {
-  if (WiFi.status() != WL_CONNECTED) return;
-  if (now - lastHealthCheck < HEALTH_CHECK_INTERVAL_MS) return;
+  if (WiFi.status() != WL_CONNECTED)
+    return;
+  if (now - lastHealthCheck < HEALTH_CHECK_INTERVAL_MS)
+    return;
 
   lastHealthCheck = now;
   lastHealthOk = doHealthCheck();
-  resultShowUntil = millis() + (lastHealthOk ? HEART_DISPLAY_MS : FAIL_DISPLAY_MS);
+  resultShowUntil =
+      millis() + (lastHealthOk ? HEART_DISPLAY_MS : FAIL_DISPLAY_MS);
+}
+
+// ---- 고유 시리얼 번호 출력 ----
+/** 보드의 고유 시리얼 번호(Unique ID)를 시리얼 모니터에 출력 */
+void printSerialNumber() {
+  Serial.print("Arduino Serial Number (UID): ");
+#if defined(ARDUINO_ARCH_RENESAS) || defined(ARDUINO_UNOR4_WIFI) ||            \
+    defined(ARDUINO_ARCH_RENESAS_UNO) || defined(RENESAS_RA4M1)
+  bsp_unique_id_t const *p_uid = R_BSP_UniqueIdGet();
+  char uidBuf[33];
+  snprintf(uidBuf, sizeof(uidBuf),
+           "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X",
+           p_uid->unique_id_bytes[0], p_uid->unique_id_bytes[1],
+           p_uid->unique_id_bytes[2], p_uid->unique_id_bytes[3],
+           p_uid->unique_id_bytes[4], p_uid->unique_id_bytes[5],
+           p_uid->unique_id_bytes[6], p_uid->unique_id_bytes[7],
+           p_uid->unique_id_bytes[8], p_uid->unique_id_bytes[9],
+           p_uid->unique_id_bytes[10], p_uid->unique_id_bytes[11],
+           p_uid->unique_id_bytes[12], p_uid->unique_id_bytes[13],
+           p_uid->unique_id_bytes[14], p_uid->unique_id_bytes[15]);
+  Serial.println(uidBuf);
+#elif defined(ESP32)
+  uint64_t chipid = ESP.getEfuseMac();
+  char chipBuf[13];
+  snprintf(chipBuf, sizeof(chipBuf), "%04X%08X", (uint16_t)(chipid >> 32),
+           (uint32_t)chipid);
+  Serial.println(chipBuf);
+#else
+  byte mac[6];
+  WiFi.macAddress(mac);
+  char macBuf[18];
+  snprintf(macBuf, sizeof(macBuf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0],
+           mac[1], mac[2], mac[3], mac[4], mac[5]);
+  Serial.println(macBuf);
+#endif
 }
 
 // ---- setup / loop ----
 void setup() {
   Serial.begin(9600);
+  delay(1500); // USB 시리얼 포트 연결 및 모니터 인식 대기
   matrix.begin();
+  printSerialNumber();
   connectWiFi();
 }
 
