@@ -164,6 +164,19 @@ bool doHealthCheck() {
   return ok;
 }
 
+/** 주기마다 헬스 체크 실행하고 결과 표시 기간 설정 */
+void runScheduledHealthCheck(unsigned long now) {
+  if (WiFi.status() != WL_CONNECTED)
+    return;
+  if (now - lastHealthCheck < HEALTH_CHECK_INTERVAL_MS)
+    return;
+
+  lastHealthCheck = now;
+  lastHealthOk = doHealthCheck();
+  resultShowUntil =
+      millis() + (lastHealthOk ? HEART_DISPLAY_MS : FAIL_DISPLAY_MS);
+}
+
 // ---- setup / loop ----
 void setup() {
   Serial.begin(9600);
